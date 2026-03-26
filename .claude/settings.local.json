@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(reg add:*)",
+      "Bash(powershell -Command \"reg add ''HKLM\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\AppModelUnlock'' /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1\")"
+    ]
+  },
+  "enabledPlugins": {
+    "ui-design@claude-code-workflows": true
+  }
+}

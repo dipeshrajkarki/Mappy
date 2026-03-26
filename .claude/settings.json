@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find d:/Mappy/lib -name *.dart)",
+      "Bash(flutter pub:*)",
+      "Bash(flutter emulators:*)",
+      "Bash(flutter devices:*)",
+      "Bash(flutter run:*)",
+      "Bash(adb wait-for-device:*)",
+      "Bash(git fetch:*)",
+      "Bash(gh repo:*)",
+      "Bash(winget install:*)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/GitHub CLI\")",
+      "Bash(gh --version)",
+      "Bash(gh auth:*)",
+      "Bash(git remote:*)",
+      "Bash(git push:*)",
+      "Bash(xargs cat:*)",
+      "Read(//c/Users/HOME/.pub-cache/hosted/pub.dev/mapbox_maps_flutter-2.20.1/**)",
+      "Read(//c/Users/HOME/.pub-cache/hosted/pub.dev/mapbox_maps_flutter-2.20.1/lib/**)",
+      "Read(//c/Users/HOME/AppData/Local/Pub/Cache/hosted/pub.dev/**)",
+      "Bash(flutter build:*)",
+      "Bash(flutter clean:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(git show:*)"
+    ]
+  },
+  "enabledPlugins": {
+    "ui-design@claude-code-workflows": true
+  }
+}
