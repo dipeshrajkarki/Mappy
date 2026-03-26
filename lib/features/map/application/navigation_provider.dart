@@ -21,6 +21,7 @@ class NavState {
   final bool isLoading;
   final String? error;
   final SearchTarget searchTarget;
+  final RoutingProfile currentProfile;
 
   // Search
   final List<Place> searchResults;
@@ -35,6 +36,7 @@ class NavState {
     this.isLoading = false,
     this.error,
     this.searchTarget = SearchTarget.destination,
+    this.currentProfile = RoutingProfile.drivingTraffic,
     this.searchResults = const [],
     this.isSearching = false,
   });
@@ -60,6 +62,7 @@ class NavState {
     bool? isLoading,
     String? error,
     SearchTarget? searchTarget,
+    RoutingProfile? currentProfile,
     List<Place>? searchResults,
     bool? isSearching,
     bool clearError = false,
@@ -76,6 +79,7 @@ class NavState {
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
       searchTarget: searchTarget ?? this.searchTarget,
+      currentProfile: currentProfile ?? this.currentProfile,
       searchResults: searchResults ?? this.searchResults,
       isSearching: isSearching ?? this.isSearching,
     );
@@ -181,6 +185,7 @@ class NavNotifier extends StateNotifier<NavState> {
         originLng: originLng,
         destLat: place.latitude,
         destLng: place.longitude,
+        profile: state.currentProfile,
       );
 
       if (mounted) {
@@ -199,9 +204,35 @@ class NavNotifier extends StateNotifier<NavState> {
     }
   }
 
+  void setRoutingProfile(RoutingProfile profile) {
+    if (state.currentProfile == profile) return;
+    state = state.copyWith(currentProfile: profile);
+    if (state.destination != null) {
+      selectDestination(state.destination!);
+    }
+  }
+
   void startNavigation() {
     if (state.route == null) return;
     state = state.copyWith(mode: NavMode.navigating, currentStepIndex: 0);
+
+    _navUpdateTimer?.cancel();
+    _navUpdateTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      _updateCurrentStep();
+    });
+  }
+
+  /// Start navigation with simulated driving along the route
+  void startSimulatedNavigation() {
+    if (state.route == null) return;
+    state = state.copyWith(mode: NavMode.navigating, currentStepIndex: 0);
+
+    // Drive the car along the route geometry
+    final locNotifier = _ref.read(locationProvider.notifier);
+    locNotifier.onSimulationFinished = () {
+      if (mounted) stopNavigation();
+    };
+    locNotifier.simulateAlongRoute(state.route!.points);
 
     _navUpdateTimer?.cancel();
     _navUpdateTimer = Timer.periodic(const Duration(seconds: 2), (_) {

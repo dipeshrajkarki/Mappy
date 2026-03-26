@@ -12,13 +12,13 @@ class DirectionsService {
     required double originLng,
     required double destLat,
     required double destLng,
-    String profile = 'driving-traffic',
+    RoutingProfile profile = RoutingProfile.drivingTraffic,
     bool alternatives = true,
   }) async {
     final coords = '$originLng,$originLat;$destLng,$destLat';
 
     final response = await _dio.get(
-      'https://api.mapbox.com/directions/v5/mapbox/$profile/$coords',
+      'https://api.mapbox.com/directions/v5/mapbox/${profile.apiString}/$coords',
       queryParameters: {
         'access_token': AppConstants.mapboxAccessToken,
         'geometries': 'geojson',
@@ -33,7 +33,7 @@ class DirectionsService {
     final routesJson = response.data['routes'] as List;
     if (routesJson.isEmpty) throw Exception('No route found');
 
-    return routesJson.map((r) => _parseRoute(r as Map<String, dynamic>)).toList();
+    return routesJson.map((r) => _parseRoute(r as Map<String, dynamic>, profile)).toList();
   }
 
   /// Convenience: returns only the best route
@@ -42,17 +42,19 @@ class DirectionsService {
     required double originLng,
     required double destLat,
     required double destLng,
+    RoutingProfile profile = RoutingProfile.drivingTraffic,
   }) async {
     final routes = await getRoutes(
       originLat: originLat,
       originLng: originLng,
       destLat: destLat,
       destLng: destLng,
+      profile: profile,
     );
     return routes.first;
   }
 
-  RouteInfo _parseRoute(Map<String, dynamic> route) {
+  RouteInfo _parseRoute(Map<String, dynamic> route, RoutingProfile profile) {
     final geometry = route['geometry'] as Map<String, dynamic>;
     final coordsList = geometry['coordinates'] as List;
 
@@ -106,6 +108,7 @@ class DirectionsService {
       durationSeconds: (route['duration'] as num).toDouble(),
       steps: steps,
       congestion: congestionSegments,
+      profile: profile,
     );
   }
 }

@@ -27,7 +27,9 @@
       "Bash(git commit:*)",
       "Bash(git show:*)",
       "Bash(git reflog:*)",
-      "Bash(git gc:*)"
+      "Bash(git gc:*)",
+      "Bash(rm -f ambulance.glb box.glb car.glb firetruck.glb garbage-truck.glb hatchback-sports.glb police.glb race.glb sedan-sports.glb suv-luxury.glb tractor-police.glb tractor.glb van.glb)",
+      "Bash(rm -rf Textures)"
     ]
   },
   "enabledPlugins": {

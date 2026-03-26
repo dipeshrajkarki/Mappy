@@ -1,9 +1,36 @@
+enum RoutingProfile { drivingTraffic, walking, cycling }
+
+extension RoutingProfileExtension on RoutingProfile {
+  String get apiString {
+    switch (this) {
+      case RoutingProfile.drivingTraffic:
+        return 'driving-traffic';
+      case RoutingProfile.walking:
+        return 'walking';
+      case RoutingProfile.cycling:
+        return 'cycling';
+    }
+  }
+
+  String get displayName {
+    switch (this) {
+      case RoutingProfile.drivingTraffic:
+        return 'Drive';
+      case RoutingProfile.walking:
+        return 'Walk';
+      case RoutingProfile.cycling:
+        return 'Cycle';
+    }
+  }
+}
+
 class RouteInfo {
   final List<RoutePoint> points;
   final double distanceMeters;
   final double durationSeconds;
   final List<RouteStep> steps;
   final List<String> congestion; // per-segment: low, moderate, heavy, severe
+  final RoutingProfile profile;
 
   const RouteInfo({
     required this.points,
@@ -11,6 +38,7 @@ class RouteInfo {
     required this.durationSeconds,
     required this.steps,
     this.congestion = const [],
+    this.profile = RoutingProfile.drivingTraffic,
   });
 
   String get distanceText {

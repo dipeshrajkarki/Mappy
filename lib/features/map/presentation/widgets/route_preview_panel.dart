@@ -6,17 +6,23 @@ import '../../domain/route_model.dart';
 class RoutePreviewPanel extends StatelessWidget {
   final Place destination;
   final RouteInfo? route;
+  final RoutingProfile currentProfile;
   final bool isLoading;
   final VoidCallback onStart;
+  final VoidCallback onSimulate;
   final VoidCallback onClose;
+  final ValueChanged<RoutingProfile> onProfileChange;
 
   const RoutePreviewPanel({
     super.key,
     required this.destination,
     required this.route,
+    required this.currentProfile,
     required this.isLoading,
     required this.onStart,
+    required this.onSimulate,
     required this.onClose,
+    required this.onProfileChange,
   });
 
   @override
@@ -102,6 +108,43 @@ class RoutePreviewPanel extends StatelessWidget {
 
                 const SizedBox(height: 20),
 
+                // Modes selection
+                Row(
+                  children: RoutingProfile.values.map((profile) {
+                    final isSelected = profile == currentProfile;
+                    final icon = profile == RoutingProfile.drivingTraffic
+                        ? Icons.directions_car
+                        : (profile == RoutingProfile.walking
+                            ? Icons.directions_walk
+                            : Icons.directions_bike);
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () => onProfileChange(profile),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppTheme.accent.withValues(alpha: 0.15)
+                                : AppTheme.bgElevated,
+                            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                            border: Border.all(
+                              color: isSelected ? AppTheme.accent : Colors.transparent,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Icon(
+                            icon,
+                            color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+
                 // Route info chips
                 if (route != null) ...[
                   Row(
@@ -130,26 +173,47 @@ class RoutePreviewPanel extends StatelessWidget {
                 Row(
                   children: [
                     // Cancel
+                    GestureDetector(
+                      onTap: onClose,
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgElevated,
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        ),
+                        child: const Icon(Icons.close, color: AppTheme.textSecondary, size: 22),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Simulate along route
                     Expanded(
-                      flex: 1,
                       child: GestureDetector(
-                        onTap: onClose,
+                        onTap: route != null ? onSimulate : null,
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           decoration: BoxDecoration(
-                            color: AppTheme.bgElevated,
+                            color: route != null ? AppTheme.bgElevated : AppTheme.bgSurface,
                             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                            border: Border.all(color: route != null ? AppTheme.accent.withValues(alpha: 0.4) : Colors.transparent),
                           ),
-                          child: const Center(
-                            child: Icon(Icons.close, color: AppTheme.textSecondary, size: 22),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.play_arrow_rounded,
+                                color: route != null ? AppTheme.accent : AppTheme.textMuted, size: 20),
+                              const SizedBox(width: 4),
+                              Text('Test',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700,
+                                  color: route != null ? AppTheme.accent : AppTheme.textMuted)),
+                            ],
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    // Start
+                    const SizedBox(width: 10),
+                    // Start real navigation
                     Expanded(
-                      flex: 3,
+                      flex: 2,
                       child: GestureDetector(
                         onTap: route != null ? onStart : null,
                         child: Container(
@@ -162,31 +226,12 @@ class RoutePreviewPanel extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.navigation_rounded,
-                                color: route != null ? AppTheme.bgDark : AppTheme.textMuted,
-                                size: 20,
-                              ),
+                              Icon(Icons.navigation_rounded,
+                                color: route != null ? AppTheme.bgDark : AppTheme.textMuted, size: 20),
                               const SizedBox(width: 8),
-                              Text(
-                                isLoading ? 'Finding route...' : 'Start my trip',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: route != null ? AppTheme.bgDark : AppTheme.textMuted,
-                                ),
-                              ),
-                              if (route != null) ...[
-                                const SizedBox(width: 8),
-                                Text(
-                                  '>>',
-                                  style: TextStyle(
-                                    color: AppTheme.bgDark.withValues(alpha: 0.5),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
+                              Text(isLoading ? 'Finding...' : 'Start',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
+                                  color: route != null ? AppTheme.bgDark : AppTheme.textMuted)),
                             ],
                           ),
                         ),
