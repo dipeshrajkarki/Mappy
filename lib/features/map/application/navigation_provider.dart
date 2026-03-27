@@ -31,6 +31,10 @@ class NavState {
   final bool isSearching;
   final bool gpsLost;
 
+  // Live navigation progress
+  final double remainingDistanceMeters;
+  final double remainingDurationSeconds;
+
   const NavState({
     this.mode = NavMode.idle,
     this.origin,
@@ -45,9 +49,33 @@ class NavState {
     this.searchResults = const [],
     this.isSearching = false,
     this.gpsLost = false,
+    this.remainingDistanceMeters = 0,
+    this.remainingDurationSeconds = 0,
   });
 
   bool get hasCustomOrigin => origin != null;
+
+  String get remainingDistanceText {
+    if (remainingDistanceMeters >= 1000) {
+      return '${(remainingDistanceMeters / 1000).toStringAsFixed(1)} km';
+    }
+    return '${remainingDistanceMeters.round()} m';
+  }
+
+  String get remainingDurationText {
+    final totalMin = (remainingDurationSeconds / 60).round();
+    if (totalMin < 60) return '$totalMin min';
+    final h = totalMin ~/ 60;
+    final m = totalMin % 60;
+    return '${h}h ${m}m';
+  }
+
+  String get remainingEtaText {
+    final arrival = DateTime.now().add(Duration(seconds: remainingDurationSeconds.round()));
+    final h = arrival.hour.toString().padLeft(2, '0');
+    final m = arrival.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
 
   RouteStep? get currentStep {
     if (route == null || currentStepIndex >= route!.steps.length) return null;
@@ -73,6 +101,8 @@ class NavState {
     List<Place>? searchResults,
     bool? isSearching,
     bool? gpsLost,
+    double? remainingDistanceMeters,
+    double? remainingDurationSeconds,
     bool clearError = false,
     bool clearOrigin = false,
     bool clearDestination = false,
@@ -92,6 +122,8 @@ class NavState {
       searchResults: searchResults ?? this.searchResults,
       isSearching: isSearching ?? this.isSearching,
       gpsLost: gpsLost ?? this.gpsLost,
+      remainingDistanceMeters: remainingDistanceMeters ?? this.remainingDistanceMeters,
+      remainingDurationSeconds: remainingDurationSeconds ?? this.remainingDurationSeconds,
     );
   }
 }
@@ -251,7 +283,12 @@ class NavNotifier extends StateNotifier<NavState> {
 
   void startNavigation() {
     if (state.route == null) return;
-    state = state.copyWith(mode: NavMode.navigating, currentStepIndex: 0);
+    state = state.copyWith(
+      mode: NavMode.navigating,
+      currentStepIndex: 0,
+      remainingDistanceMeters: state.route!.distanceMeters,
+      remainingDurationSeconds: state.route!.durationSeconds,
+    );
 
     // Enable road snapping for real GPS navigation
     _ref.read(locationProvider.notifier).setSnapToRoad(true);
@@ -265,7 +302,12 @@ class NavNotifier extends StateNotifier<NavState> {
   /// Start navigation with simulated driving along the route
   void startSimulatedNavigation() {
     if (state.route == null) return;
-    state = state.copyWith(mode: NavMode.navigating, currentStepIndex: 0);
+    state = state.copyWith(
+      mode: NavMode.navigating,
+      currentStepIndex: 0,
+      remainingDistanceMeters: state.route!.distanceMeters,
+      remainingDurationSeconds: state.route!.durationSeconds,
+    );
 
     // Drive the car along the route geometry
     final locNotifier = _ref.read(locationProvider.notifier);
@@ -311,6 +353,9 @@ class NavNotifier extends StateNotifier<NavState> {
       }
     }
 
+    // Update remaining distance and ETA
+    _updateRemainingProgress(loc.latitude!, loc.longitude!);
+
     final dest = state.destination;
     if (dest == null) return;
     final distToDest = _distanceMeters(
@@ -320,6 +365,40 @@ class NavNotifier extends StateNotifier<NavState> {
     if (distToDest < AppConstants.destinationDetectionMeters) {
       _arriveAtDestination();
     }
+  }
+
+  void _updateRemainingProgress(double lat, double lng) {
+    final route = state.route;
+    if (route == null) return;
+
+    // Sum distance/duration of remaining steps from current step onward
+    final steps = route.steps;
+    double remainDist = 0;
+    double remainDur = 0;
+    for (int i = state.currentStepIndex; i < steps.length; i++) {
+      remainDist += steps[i].distanceMeters;
+      remainDur += steps[i].durationSeconds;
+    }
+
+    // Subtract progress within current step (approximate by distance to next step location)
+    if (state.currentStepIndex < steps.length) {
+      final currentStep = steps[state.currentStepIndex];
+      final distToStepEnd = _distanceMeters(
+        lat, lng,
+        currentStep.location.latitude, currentStep.location.longitude,
+      );
+      // Current step's distance minus how far we are into it
+      final progress = currentStep.distanceMeters > 0
+          ? (1.0 - (distToStepEnd / currentStep.distanceMeters).clamp(0.0, 1.0))
+          : 1.0;
+      remainDist -= currentStep.distanceMeters * progress;
+      remainDur -= currentStep.durationSeconds * progress;
+    }
+
+    state = state.copyWith(
+      remainingDistanceMeters: remainDist.clamp(0, double.infinity),
+      remainingDurationSeconds: remainDur.clamp(0, double.infinity),
+    );
   }
 
   void _arriveAtDestination() {

@@ -19,7 +19,7 @@ dependencies:
   dio: ^5.7.0
 
   # Maps
-  mapbox_maps_flutter: ^2.4.0
+  mapbox_maps_flutter: ^2.20.1
 
   # Location
   geolocator: ^13.0.2

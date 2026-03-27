@@ -20,7 +20,7 @@ class AppConstants {
   // Camera — street-level navigation view (close to car, can see lanes)
   static const double navPitch = 65.0;
   static const double navZoom = 19.0;
-  static const double navOffsetMeters = 20.0;
+  static const double navOffsetMeters = 100.0;
   static const int cameraAnimDriveMs = 400;
   static const int cameraAnimIdleMs = 800;
 

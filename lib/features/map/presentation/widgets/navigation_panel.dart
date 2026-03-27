@@ -262,11 +262,17 @@ class _LaneArrow extends StatelessWidget {
 
 class NavigationBottomBar extends ConsumerWidget {
   final RouteInfo route;
+  final String remainingEta;
+  final String remainingDuration;
+  final String remainingDistance;
   final VoidCallback onStop;
 
   const NavigationBottomBar({
     super.key,
     required this.route,
+    required this.remainingEta,
+    required this.remainingDuration,
+    required this.remainingDistance,
     required this.onStop,
   });
 
@@ -298,7 +304,7 @@ class NavigationBottomBar extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  route.etaText,
+                  remainingEta,
                   style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w700,
@@ -307,7 +313,7 @@ class NavigationBottomBar extends ConsumerWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${route.durationText}  ·  ${route.distanceText}',
+                  '$remainingDuration  ·  $remainingDistance',
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppTheme.textSecondary,

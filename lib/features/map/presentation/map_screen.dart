@@ -1,3 +1,4 @@
+// ignore_for_file: experimental_member_use
 import 'dart:math';
 import 'dart:ui' as ui;
 
@@ -27,7 +28,7 @@ class MapScreen extends ConsumerStatefulWidget {
 
 /// Camera modes during navigation
 enum CameraMode {
-  /// Locked behind the car — camera follows heading smoothly, no swing
+  /// Locked behind the car — camera follows heading smoothly
   lockedBehind,
   /// North is always up, camera follows position only
   northUp,
@@ -39,12 +40,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   MapboxMap? _mapboxMap;
   bool _isFollowing = true;
   CameraMode _cameraMode = CameraMode.lockedBehind;
+
   PolylineAnnotationManager? _routeLineManager;
   PointAnnotationManager? _markerManager;
   PointAnnotationManager? _pointManager;
   PointAnnotation? _pointAnnotation;
   Uint8List? _arrowImageBytes;
-  Uint8List? _customCarBytes;
   String _selectedVehicle = 'classic'; // default to 2D arrow (3D models need real GPU)
   DateTime _lastLocationUpdate = DateTime(0);
   static const _locationThrottleMs = 66; // ~15fps max for map updates
@@ -52,9 +53,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   final List<String> _availableVehicles = [
     'classic',
     'sedan',
+    'sedan-sports',
+    'hatchback-sports',
     'suv',
-    'taxi',
+    'suv-luxury',
+    'van',
     'truck',
+    'taxi',
+    'police',
+    'race',
+    'race-future',
   ];
 
   @override
@@ -66,26 +74,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     });
   }
 
-  Future<void> _loadIcons() async {
-    // Generate default navigation arrow
-    _arrowImageBytes = await _generateArrowImage();
+  Uint8List? _carIconBytes;
 
-    // Try loading custom car icon from assets
-    try {
-      final data = await rootBundle.load('assets/icons/car.png');
-      _customCarBytes = data.buffer.asUint8List();
-    } catch (e) {
-      debugPrint('No custom car icon found: $e');
-    }
+  Future<void> _loadIcons() async {
+    _arrowImageBytes = await _generateArrowImage();
+    _carIconBytes = await _generateCarImage();
   }
 
-  /// Generates a bold, visible navigation arrow
+  /// Generates a bold lime navigation arrow (chevron)
   Future<Uint8List> _generateArrowImage() async {
     const size = 120.0;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, size, size));
 
-    // Drop shadow
     final shadowPaint = Paint()
       ..color = Colors.black.withValues(alpha: 0.5)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
@@ -97,7 +98,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ..close();
     canvas.drawPath(shadowPath, shadowPaint);
 
-    // Lime arrow body
     final paint = Paint()
       ..color = AppTheme.accent
       ..style = PaintingStyle.fill;
@@ -109,13 +109,99 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ..close();
     canvas.drawPath(path, paint);
 
-    // White border
     final borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.5
       ..strokeJoin = StrokeJoin.round;
     canvas.drawPath(path, borderPaint);
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(size.toInt(), size.toInt());
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    return byteData!.buffer.asUint8List();
+  }
+
+  /// Generates a top-down 2D car icon (white car shape with lime accent)
+  Future<Uint8List> _generateCarImage() async {
+    const size = 128.0;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, size, size));
+    final cx = size / 2;
+
+    // Shadow
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx, cx + 2), width: 52, height: 92),
+        const Radius.circular(14),
+      ),
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.5)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+
+    // Car body
+    final bodyRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: Offset(cx, cx), width: 48, height: 88),
+      const Radius.circular(12),
+    );
+    canvas.drawRRect(bodyRect, Paint()..color = Colors.white);
+
+    // Roof / windshield area (darker)
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx, cx - 6), width: 36, height: 32),
+        const Radius.circular(8),
+      ),
+      Paint()..color = const Color(0xFFB0BEC5),
+    );
+
+    // Front windshield (dark)
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx, cx - 16), width: 32, height: 14),
+        const Radius.circular(4),
+      ),
+      Paint()..color = const Color(0xFF37474F),
+    );
+
+    // Rear windshield
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx, cx + 8), width: 30, height: 10),
+        const Radius.circular(3),
+      ),
+      Paint()..color = const Color(0xFF455A64),
+    );
+
+    // Headlights (lime accent)
+    canvas.drawCircle(Offset(cx - 14, cx - 38), 4, Paint()..color = AppTheme.accent);
+    canvas.drawCircle(Offset(cx + 14, cx - 38), 4, Paint()..color = AppTheme.accent);
+
+    // Taillights (red)
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx - 16, cx + 38), width: 8, height: 5),
+        const Radius.circular(2),
+      ),
+      Paint()..color = const Color(0xFFEF4444),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx + 16, cx + 38), width: 8, height: 5),
+        const Radius.circular(2),
+      ),
+      Paint()..color = const Color(0xFFEF4444),
+    );
+
+    // Outline
+    canvas.drawRRect(
+      bodyRect,
+      Paint()
+        ..color = AppTheme.accent.withValues(alpha: 0.6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
 
     final picture = recorder.endRecording();
     final img = await picture.toImage(size.toInt(), size.toInt());
@@ -307,11 +393,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         : loc.heading;
 
     try {
-      if (_selectedVehicle == 'classic') {
-        await _update2DArrow(loc, arrowRotation);
-      } else {
-        await _update3DModel(loc);
-      }
+      // Always use 2D icons — 3D ModelLayer needs real GPU (not emulator)
+      // 'classic' = lime arrow, anything else = top-down car icon
+      await _update2DArrow(loc, arrowRotation);
     } catch (e) {
       debugPrint('Failed to update nav arrow: $e');
     }
@@ -325,7 +409,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _remove3DLayer();
 
     final point = Point(coordinates: Position(loc.longitude!, loc.latitude!));
-    final iconBytes = _customCarBytes ?? _arrowImageBytes;
+    // Use car icon for non-classic vehicles, arrow for classic
+    final iconBytes = _selectedVehicle == 'classic'
+        ? _arrowImageBytes
+        : (_carIconBytes ?? _arrowImageBytes);
     if (iconBytes == null) return;
 
     if (_pointAnnotation != null) {
@@ -359,57 +446,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
-  Future<void> _update3DModel(LocationState loc) async {
-    // Remove 2D arrow if switching from classic
-    if (_pointAnnotation != null) {
-      try {
-        await _pointManager?.delete(_pointAnnotation!);
-      } catch (e) {
-        debugPrint('Failed to remove 2D arrow: $e');
-      }
-      _pointAnnotation = null;
-    }
-
-    final geojson =
-        '{"type":"Feature","geometry":{"type":"Point","coordinates":[${loc.longitude},${loc.latitude}]}}';
-
-    try {
-      final sourceExists = await _mapboxMap!.style.styleSourceExists(
-        _carSourceId,
-      );
-      if (sourceExists) {
-        // Update position
-        final src = await _mapboxMap!.style.getSource(_carSourceId);
-        (src as GeoJsonSource).updateGeoJSON(geojson);
-        // Update rotation
-        if (await _mapboxMap!.style.styleLayerExists(_carLayerId)) {
-          await _mapboxMap!.style.setStyleLayerProperty(
-            _carLayerId,
-            'model-rotation',
-            [0.0, 0.0, loc.heading],
-          );
-        }
-      } else {
-        // Create source + layer
-        await _mapboxMap!.style.addSource(
-          GeoJsonSource(id: _carSourceId, data: geojson),
-        );
-        await _mapboxMap!.style.addLayer(
-          ModelLayer(
-            id: _carLayerId,
-            sourceId: _carSourceId,
-            modelId: _selectedVehicle,
-            modelScale: [15.0, 15.0, 15.0],
-            modelRotation: [0.0, 0.0, loc.heading],
-            modelScaleMode: ModelScaleMode.MAP,
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Failed to update 3D model: $e');
-    }
-  }
-
   void _remove3DLayer() async {
     if (_mapboxMap == null) return;
     try {
@@ -431,11 +467,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     setState(() {
       _isFollowing = true;
-      // Exit overview mode when re-centering
-      if (_cameraMode == CameraMode.overview) {
-        _cameraMode = CameraMode.lockedBehind;
-      }
+      if (_cameraMode == CameraMode.overview) _cameraMode = CameraMode.lockedBehind;
     });
+
     final navState = ref.read(navProvider);
     final isNav = navState.mode == NavMode.navigating || navState.mode == NavMode.arriving;
 
@@ -569,11 +603,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           break;
         case CameraMode.northUp:
           _cameraMode = CameraMode.overview;
-          // Show route overview if we have a route
           if (navState.route != null) {
             _fitRouteBounds(navState.route!);
           }
-          return; // don't call _updateCameraSmooth — overview handles its own camera
+          return;
         case CameraMode.overview:
           _cameraMode = CameraMode.lockedBehind;
           _isFollowing = true;
@@ -729,7 +762,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           null,
         )
         .then((camera) {
-          // Force flat top-down view for route preview — no tilt, north-up
           final flatCamera = CameraOptions(
             center: camera.center,
             zoom: camera.zoom,
@@ -767,6 +799,36 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
+  static String _vehicleDisplayName(String id) {
+    switch (id) {
+      case 'classic': return 'Arrow';
+      case 'sedan': return 'Sedan';
+      case 'sedan-sports': return 'Sports Sedan';
+      case 'hatchback-sports': return 'Sports Hatchback';
+      case 'suv': return 'SUV';
+      case 'suv-luxury': return 'Luxury SUV';
+      case 'van': return 'Van';
+      case 'truck': return 'Truck';
+      case 'taxi': return 'Taxi';
+      case 'police': return 'Police';
+      case 'race': return 'Race Car';
+      case 'race-future': return 'Future Racer';
+      default: return id;
+    }
+  }
+
+  static IconData _vehicleIcon(String id) {
+    switch (id) {
+      case 'classic': return Icons.navigation;
+      case 'taxi': return Icons.local_taxi;
+      case 'police': return Icons.local_police;
+      case 'truck': return Icons.local_shipping;
+      case 'van': return Icons.airport_shuttle;
+      case 'race': case 'race-future': return Icons.speed;
+      default: return Icons.directions_car;
+    }
+  }
+
   void _showCarSelector(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -781,51 +843,69 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Select Vehicle Model',
+                'Vehicle',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               const Text(
-                '3D models (.glb/.gltf) can be added to the assets folder.',
+                '3D models require a real device with GPU',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               Expanded(
-                child: ListView.builder(
-                  shrinkWrap: true,
+                child: GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 1.0,
+                  ),
                   itemCount: _availableVehicles.length,
                   itemBuilder: (context, index) {
                     final vehicle = _availableVehicles[index];
-                    final isClassic = vehicle == 'classic';
                     final isSelected = vehicle == _selectedVehicle;
 
-                    return ListTile(
-                      leading: Icon(
-                        isClassic ? Icons.navigation : Icons.directions_car,
-                        color: isSelected
-                            ? AppTheme.accent
-                            : AppTheme.textSecondary,
-                      ),
-                      title: Text(
-                        isClassic ? 'Classic Arrow' : '3D $vehicle (.glb)',
-                        style: TextStyle(
+                    return GestureDetector(
+                      onTap: () => _setVehicle(vehicle),
+                      child: Container(
+                        decoration: BoxDecoration(
                           color: isSelected
-                              ? AppTheme.textPrimary
-                              : AppTheme.textSecondary,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
+                              ? AppTheme.accent.withValues(alpha: 0.15)
+                              : AppTheme.bgElevated,
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                          border: Border.all(
+                            color: isSelected ? AppTheme.accent : AppTheme.bgSurface,
+                            width: isSelected ? 2 : 1,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _vehicleIcon(vehicle),
+                              color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
+                              size: 28,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _vehicleDisplayName(vehicle),
+                              style: TextStyle(
+                                color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
+                                fontSize: 11,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
                       ),
-                      trailing: isSelected
-                          ? const Icon(Icons.check, color: AppTheme.accent)
-                          : null,
-                      onTap: () => _setVehicle(vehicle),
                     );
                   },
                 ),
@@ -872,17 +952,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       }
       if (next.mode == NavMode.idle && prev?.mode != NavMode.idle) {
         _clearRoute();
-        _deactivateArrow(); // remove arrow/3D model from map
+        _deactivateArrow();
+        _setBuildingsForNav(false);
         _flyToUser();
-        _setBuildingsForNav(false); // restore full buildings
       }
       if (next.mode == NavMode.navigating && prev?.mode != NavMode.navigating) {
+        _setBuildingsForNav(true);
         setState(() {
           _isFollowing = true;
           _cameraMode = CameraMode.lockedBehind;
         });
-        _setBuildingsForNav(true);
-        // Instantly position camera BEFORE simulation starts moving the car
         final loc = ref.read(locationProvider);
         if (loc.hasLocation) {
           _smoothedBearing = loc.heading;
@@ -1092,6 +1171,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 right: 0,
                 child: NavigationBottomBar(
                   route: navState.route!,
+                  remainingEta: navState.remainingEtaText,
+                  remainingDuration: navState.remainingDurationText,
+                  remainingDistance: navState.remainingDistanceText,
                   onStop: () => ref.read(navProvider.notifier).stopNavigation(),
                 ),
               ),

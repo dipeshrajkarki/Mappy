@@ -6,7 +6,23 @@
       "Bash(\"D:/Mappy/lib/features/map/presentation/map_screen_clean.dart\")",
       "Bash(dart fix:*)",
       "Bash(wc -l lib/**/*.dart lib/**/**/*.dart lib/**/**/**/*.dart lib/**/**/**/**/*.dart)",
-      "Bash($ANDROID_HOME/platform-tools/adb.exe wait-for-device:*)"
+      "Bash($ANDROID_HOME/platform-tools/adb.exe wait-for-device:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.mapbox.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:pub.dev)",
+      "Bash(git clone:*)",
+      "Bash(git:*)",
+      "Bash(gh api:*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\"\"Stars: {d[''''stargazers_count'''']}\\\\nForks: {d[''''forks_count'''']}\\\\nOpen issues: {d[''''open_issues_count'''']}\\\\nCreated: {d[''''created_at'''']}\\\\nPushed: {d[''''pushed_at'''']}\\\\nUpdated: {d[''''updated_at'''']}\\\\nFork: {d[''''fork'''']}\\\\nParent: {d.get\\(''''parent'''',{}\\).get\\(''''full_name'''',''''N/A''''\\)}\\\\nDefault branch: {d[''''default_branch'''']}\\\\nArchived: {d[''''archived'''']}\"\"\\)\")",
+      "Bash(python3 -c \"import sys,json; issues=json.load\\(sys.stdin\\); print\\(f''''Total issues/PRs: {len\\(issues\\)}''''\\); [print\\(f''''  #{i[number]} [{i[state]}] {i[title]}''''\\) for i in issues[:10]]\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\"\"Original repo stars: {d[''''stargazers_count'''']}\\\\nForks: {d[''''forks_count'''']}\\\\nOpen issues: {d[''''open_issues_count'''']}\\\\nPushed: {d[''''pushed_at'''']}\\\\nArchived: {d[''''archived'''']}\"\"\\)\")",
+      "Bash(python3 -c \"import sys,json; issues=json.load\\(sys.stdin\\); [print\\(f''''  #{i[\"\"number\"\"]} {i[\"\"title\"\"]}''''\\) for i in issues[:10]]\")",
+      "Bash(python3 -c \"import sys,json; commits=json.load\\(sys.stdin\\); [print\\(f''''{c[\"\"sha\"\"][:8]} {c[\"\"commit\"\"][\"\"author\"\"][\"\"date\"\"]} {c[\"\"commit\"\"][\"\"message\"\"][:80]}''''\\) for c in commits]\")",
+      "Bash(find D:/Mappy -name *.glb -o -name *.gltf)",
+      "Bash(rm -f box.glb cone.glb cone-flat.glb debris-*.glb wheel-*.glb kart-*.glb tractor.glb tractor-police.glb tractor-shovel.glb ambulance.glb firetruck.glb garbage-truck.glb delivery.glb delivery-flat.glb truck-flat.glb)",
+      "Bash(ls -la *.glb)"
     ]
   },
   "enabledPlugins": {
