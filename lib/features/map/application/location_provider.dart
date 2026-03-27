@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../core/constants/app_constants.dart';
+import '../data/map_matching_service.dart';
 import '../domain/route_model.dart';
 
 class LocationState {
@@ -14,7 +15,6 @@ class LocationState {
   final bool hasPermission;
   final bool isTracking;
   final bool isSimulating;
-  final bool isManualDriving;
   final String? error;
   final bool permissionDeniedForever;
 
@@ -26,14 +26,13 @@ class LocationState {
     this.hasPermission = false,
     this.isTracking = false,
     this.isSimulating = false,
-    this.isManualDriving = false,
     this.error,
     this.permissionDeniedForever = false,
   });
 
   double get speedKmh => max(0, speedMps * 3.6);
   bool get hasLocation => latitude != null && longitude != null;
-  bool get isFakeGps => isSimulating || isManualDriving;
+  bool get isFakeGps => isSimulating;
 
   LocationState copyWith({
     double? latitude,
@@ -43,7 +42,6 @@ class LocationState {
     bool? hasPermission,
     bool? isTracking,
     bool? isSimulating,
-    bool? isManualDriving,
     String? error,
     bool? permissionDeniedForever,
     bool clearError = false,
@@ -56,7 +54,6 @@ class LocationState {
       hasPermission: hasPermission ?? this.hasPermission,
       isTracking: isTracking ?? this.isTracking,
       isSimulating: isSimulating ?? this.isSimulating,
-      isManualDriving: isManualDriving ?? this.isManualDriving,
       error: clearError ? null : (error ?? this.error),
       permissionDeniedForever:
           permissionDeniedForever ?? this.permissionDeniedForever,
@@ -69,28 +66,17 @@ class LocationNotifier extends StateNotifier<LocationState> {
 
   StreamSubscription<Position>? _positionSub;
   Timer? _simTimer;
-  Timer? _manualTimer;
   VoidCallback? onSimulationFinished;
+  final _mapMatching = MapMatchingService();
+  bool _snapToRoad = false;
 
   // Route simulation — moves at realistic speed along route geometry
   List<RoutePoint> _routePoints = [];
   int _simIndex = 0;
   double _simProgress = 0; // 0..1 progress within current segment
   double _simSegmentDist = 0;
-  static const _simSpeedMps = 13.9; // ~50 km/h
-  static const _simTickMs = 33; // ~30fps
-
-  // D-pad manual driving
-  double _manualSpeedMps = 0;
-  double _manualHeading = 0;
-  double _throttle = 0;
-  double _steering = 0;
-  static const _maxSpeedMps = 22.0; // ~80 km/h max
-  static const _accelRate = 3.0;
-  static const _brakeRate = 8.0;
-  static const _frictionRate = 1.5;
-  static const _steerRate = 90.0;
-  static const _padTickMs = 33;
+  static const _simSpeedMps = AppConstants.simSpeedMps;
+  static const _simTickMs = AppConstants.simTickMs;
 
   // ==========================================
   // GPS init
@@ -124,6 +110,9 @@ class LocationNotifier extends StateNotifier<LocationState> {
     _startTracking();
   }
 
+  /// Enable/disable road snapping for real GPS positions
+  void setSnapToRoad(bool enabled) => _snapToRoad = enabled;
+
   void _startTracking() {
     _positionSub?.cancel();
     _positionSub = Geolocator.getPositionStream(
@@ -134,17 +123,49 @@ class LocationNotifier extends StateNotifier<LocationState> {
     ).listen(
       (pos) {
         if (!state.isFakeGps) {
-          state = state.copyWith(
-            latitude: pos.latitude,
-            longitude: pos.longitude,
-            speedMps: pos.speed,
-            heading: pos.heading,
-            isTracking: true,
-          );
+          if (_snapToRoad) {
+            _snapAndUpdate(pos);
+          } else {
+            state = state.copyWith(
+              latitude: pos.latitude,
+              longitude: pos.longitude,
+              speedMps: pos.speed,
+              heading: pos.heading,
+              isTracking: true,
+            );
+          }
         }
       },
       onError: (e) => state = state.copyWith(error: 'Location error: $e'),
     );
+  }
+
+  Future<void> _snapAndUpdate(Position pos) async {
+    final snapped = await _mapMatching.snapToRoad(
+      pos.latitude,
+      pos.longitude,
+      pos.heading,
+    );
+    if (!mounted) return;
+
+    if (snapped != null) {
+      state = state.copyWith(
+        latitude: snapped.$1,
+        longitude: snapped.$2,
+        speedMps: pos.speed,
+        heading: snapped.$3,
+        isTracking: true,
+      );
+    } else {
+      // Fallback to raw GPS if no road match
+      state = state.copyWith(
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        speedMps: pos.speed,
+        heading: pos.heading,
+        isTracking: true,
+      );
+    }
   }
 
   // ==========================================
@@ -153,7 +174,8 @@ class LocationNotifier extends StateNotifier<LocationState> {
 
   void simulateAlongRoute(List<RoutePoint> points) {
     if (points.length < 2) return;
-    _stopAll();
+    _simTimer?.cancel();
+    _simTimer = null;
 
     _routePoints = points;
     _simIndex = 0;
@@ -170,7 +192,6 @@ class LocationNotifier extends StateNotifier<LocationState> {
 
     state = state.copyWith(
       isSimulating: true,
-      isManualDriving: false,
       hasPermission: true,
       latitude: points[0].latitude,
       longitude: points[0].longitude,
@@ -256,91 +277,8 @@ class LocationNotifier extends StateNotifier<LocationState> {
   }
 
   // ==========================================
-  // D-pad manual driving
-  // ==========================================
-
-  void startManualDriving() {
-    _stopAll();
-
-    final lat = state.latitude ?? AppConstants.defaultLat;
-    final lng = state.longitude ?? AppConstants.defaultLng;
-    _manualSpeedMps = 0;
-    _manualHeading = state.heading;
-    _throttle = 0;
-    _steering = 0;
-
-    state = state.copyWith(
-      isManualDriving: true, isSimulating: false,
-      hasPermission: true, latitude: lat, longitude: lng,
-      speedMps: 0, isTracking: true,
-    );
-
-    _manualTimer = Timer.periodic(
-      const Duration(milliseconds: _padTickMs),
-      (_) => _tickDpad(),
-    );
-  }
-
-  void stopManualDriving() {
-    _manualTimer?.cancel();
-    _manualTimer = null;
-    _throttle = 0;
-    _steering = 0;
-    _manualSpeedMps = 0;
-    state = state.copyWith(isManualDriving: false, speedMps: 0);
-  }
-
-  void setThrottle(double v) => _throttle = v.clamp(-1.0, 1.0);
-  void setSteering(double v) => _steering = v.clamp(-1.0, 1.0);
-
-  void _tickDpad() {
-    if (!state.isManualDriving) return;
-    final dt = _padTickMs / 1000.0;
-
-    final sf = (_manualSpeedMps / _maxSpeedMps).clamp(0.3, 1.0);
-    _manualHeading = (_manualHeading + _steering * _steerRate * sf * dt + 360) % 360;
-
-    if (_throttle > 0) {
-      _manualSpeedMps += _throttle * _accelRate * dt;
-    } else if (_throttle < 0) {
-      _manualSpeedMps += _throttle * _brakeRate * dt;
-    } else {
-      _manualSpeedMps -= _frictionRate * dt;
-    }
-    _manualSpeedMps = _manualSpeedMps.clamp(0.0, _maxSpeedMps);
-
-    if (_manualSpeedMps > 0.1) {
-      final d = _manualSpeedMps * dt;
-      final pos = _move(state.latitude ?? AppConstants.defaultLat,
-          state.longitude ?? AppConstants.defaultLng, _manualHeading, d);
-      state = state.copyWith(
-        latitude: pos.$1, longitude: pos.$2,
-        heading: _manualHeading, speedMps: _manualSpeedMps,
-      );
-    } else {
-      state = state.copyWith(heading: _manualHeading, speedMps: _manualSpeedMps);
-    }
-  }
-
-  // ==========================================
   // Utilities
   // ==========================================
-
-  void _stopAll() {
-    _simTimer?.cancel(); _simTimer = null;
-    _manualTimer?.cancel(); _manualTimer = null;
-  }
-
-  static (double, double) _move(double lat, double lng, double brg, double m) {
-    const r = 6371000.0;
-    final d = m / r;
-    final b = brg * pi / 180;
-    final la = lat * pi / 180;
-    final lo = lng * pi / 180;
-    final la2 = asin(sin(la) * cos(d) + cos(la) * sin(d) * cos(b));
-    final lo2 = lo + atan2(sin(b) * sin(d) * cos(la), cos(d) - sin(la) * sin(la2));
-    return (la2 * 180 / pi, lo2 * 180 / pi);
-  }
 
   static double _dist(double lat1, double lng1, double lat2, double lng2) {
     const r = 6371000.0;
@@ -365,7 +303,6 @@ class LocationNotifier extends StateNotifier<LocationState> {
   void dispose() {
     _positionSub?.cancel();
     _simTimer?.cancel();
-    _manualTimer?.cancel();
     super.dispose();
   }
 }

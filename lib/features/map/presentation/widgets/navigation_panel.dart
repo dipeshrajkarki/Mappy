@@ -4,7 +4,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../application/location_provider.dart';
 import '../../domain/route_model.dart';
 
-// === Top bar: current turn instruction ===
+// === Top bar: current turn instruction + lane guidance ===
 
 class NavigationTopBar extends StatelessWidget {
   final RouteStep? currentStep;
@@ -37,7 +37,7 @@ class NavigationTopBar extends StatelessWidget {
           SizedBox(height: topPadding),
           if (currentStep != null)
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
               child: Row(
                 children: [
                   // Maneuver icon
@@ -95,6 +95,10 @@ class NavigationTopBar extends StatelessWidget {
               ),
             ),
 
+          // Lane guidance
+          if (currentStep != null && currentStep!.hasLaneGuidance)
+            _LaneGuidanceBar(lanes: currentStep!.lanes),
+
           // Next step preview
           if (nextStep != null)
             Container(
@@ -149,6 +153,108 @@ class NavigationTopBar extends StatelessWidget {
     if (maneuver.contains('fork')) return Icons.fork_right;
     if (maneuver.contains('uturn')) return Icons.u_turn_left;
     return Icons.straight;
+  }
+}
+
+// === Lane guidance indicator ===
+
+class _LaneGuidanceBar extends StatelessWidget {
+  final List<LaneInfo> lanes;
+
+  const _LaneGuidanceBar({required this.lanes});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      color: AppTheme.bgElevated,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: lanes.map((lane) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: _LaneArrow(lane: lane),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+class _LaneArrow extends StatelessWidget {
+  final LaneInfo lane;
+
+  const _LaneArrow({required this.lane});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = lane.valid
+        ? AppTheme.accent
+        : AppTheme.textMuted.withValues(alpha: 0.4);
+
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: lane.valid
+            ? AppTheme.accent.withValues(alpha: 0.15)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: lane.valid
+              ? AppTheme.accent.withValues(alpha: 0.3)
+              : AppTheme.bgSurface,
+          width: 1,
+        ),
+      ),
+      child: _buildArrowIcon(color),
+    );
+  }
+
+  Widget _buildArrowIcon(Color color) {
+    // Show the primary indication as an arrow icon
+    final indication = lane.indications.isNotEmpty ? lane.indications.first : 'straight';
+
+    final IconData icon;
+    final double rotation;
+
+    switch (indication) {
+      case 'left':
+        icon = Icons.arrow_upward_rounded;
+        rotation = -0.785; // -45 degrees
+      case 'slight left':
+        icon = Icons.arrow_upward_rounded;
+        rotation = -0.393; // -22.5 degrees
+      case 'sharp left':
+        icon = Icons.arrow_upward_rounded;
+        rotation = -1.571; // -90 degrees
+      case 'right':
+        icon = Icons.arrow_upward_rounded;
+        rotation = 0.785; // 45 degrees
+      case 'slight right':
+        icon = Icons.arrow_upward_rounded;
+        rotation = 0.393; // 22.5 degrees
+      case 'sharp right':
+        icon = Icons.arrow_upward_rounded;
+        rotation = 1.571; // 90 degrees
+      case 'uturn':
+        icon = Icons.u_turn_left;
+        rotation = 0;
+      case 'straight':
+      default:
+        icon = Icons.arrow_upward_rounded;
+        rotation = 0;
+    }
+
+    if (rotation == 0 && icon != Icons.u_turn_left) {
+      return Icon(icon, color: color, size: 18);
+    }
+
+    return Transform.rotate(
+      angle: rotation,
+      child: Icon(icon, color: color, size: 18),
+    );
   }
 }
 

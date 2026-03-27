@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/constants/app_constants.dart';
 import '../data/directions_service.dart';
 import '../data/geocoding_service.dart';
 import '../domain/place_model.dart';
 import '../domain/route_model.dart';
 import 'location_provider.dart';
 
-enum NavMode { idle, searching, routePreview, navigating, driving }
+enum NavMode { idle, searching, routePreview, navigating, arriving }
 
 /// Which field is being searched: origin or destination
 enum SearchTarget { origin, destination }
@@ -17,6 +19,7 @@ class NavState {
   final Place? origin;
   final Place? destination;
   final RouteInfo? route;
+  final List<RouteInfo> alternativeRoutes;
   final int currentStepIndex;
   final bool isLoading;
   final String? error;
@@ -26,12 +29,14 @@ class NavState {
   // Search
   final List<Place> searchResults;
   final bool isSearching;
+  final bool gpsLost;
 
   const NavState({
     this.mode = NavMode.idle,
     this.origin,
     this.destination,
     this.route,
+    this.alternativeRoutes = const [],
     this.currentStepIndex = 0,
     this.isLoading = false,
     this.error,
@@ -39,6 +44,7 @@ class NavState {
     this.currentProfile = RoutingProfile.drivingTraffic,
     this.searchResults = const [],
     this.isSearching = false,
+    this.gpsLost = false,
   });
 
   bool get hasCustomOrigin => origin != null;
@@ -58,6 +64,7 @@ class NavState {
     Place? origin,
     Place? destination,
     RouteInfo? route,
+    List<RouteInfo>? alternativeRoutes,
     int? currentStepIndex,
     bool? isLoading,
     String? error,
@@ -65,6 +72,7 @@ class NavState {
     RoutingProfile? currentProfile,
     List<Place>? searchResults,
     bool? isSearching,
+    bool? gpsLost,
     bool clearError = false,
     bool clearOrigin = false,
     bool clearDestination = false,
@@ -75,6 +83,7 @@ class NavState {
       origin: clearOrigin ? null : (origin ?? this.origin),
       destination: clearDestination ? null : (destination ?? this.destination),
       route: clearRoute ? null : (route ?? this.route),
+      alternativeRoutes: clearRoute ? const [] : (alternativeRoutes ?? this.alternativeRoutes),
       currentStepIndex: currentStepIndex ?? this.currentStepIndex,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
@@ -82,6 +91,7 @@ class NavState {
       currentProfile: currentProfile ?? this.currentProfile,
       searchResults: searchResults ?? this.searchResults,
       isSearching: isSearching ?? this.isSearching,
+      gpsLost: gpsLost ?? this.gpsLost,
     );
   }
 }
@@ -94,6 +104,7 @@ class NavNotifier extends StateNotifier<NavState> {
   final _directions = DirectionsService();
   Timer? _searchDebounce;
   Timer? _navUpdateTimer;
+  int _searchGeneration = 0; // tracks latest search to discard stale results
 
   void openSearch({SearchTarget target = SearchTarget.destination}) {
     state = state.copyWith(
@@ -116,7 +127,8 @@ class NavNotifier extends StateNotifier<NavState> {
     }
 
     state = state.copyWith(isSearching: true);
-    _searchDebounce = Timer(const Duration(milliseconds: 400), () async {
+    final generation = ++_searchGeneration;
+    _searchDebounce = Timer(const Duration(milliseconds: AppConstants.searchDebounceMs), () async {
       try {
         final loc = _ref.read(locationProvider);
         final results = await _geocoding.search(
@@ -124,11 +136,13 @@ class NavNotifier extends StateNotifier<NavState> {
           lat: loc.latitude,
           lng: loc.longitude,
         );
-        if (mounted) {
+        // Only apply if this is still the latest search
+        if (mounted && generation == _searchGeneration) {
           state = state.copyWith(searchResults: results, isSearching: false);
         }
       } catch (e) {
-        if (mounted) {
+        debugPrint('Search error: $e');
+        if (mounted && generation == _searchGeneration) {
           state = state.copyWith(isSearching: false);
         }
       }
@@ -180,7 +194,7 @@ class NavNotifier extends StateNotifier<NavState> {
         originLng = loc.longitude!;
       }
 
-      final route = await _directions.getRoute(
+      final routes = await _directions.getRoutes(
         originLat: originLat,
         originLng: originLng,
         destLat: place.latitude,
@@ -189,9 +203,14 @@ class NavNotifier extends StateNotifier<NavState> {
       );
 
       if (mounted) {
-        state = state.copyWith(route: route, isLoading: false);
+        state = state.copyWith(
+          route: routes.first,
+          alternativeRoutes: routes.length > 1 ? routes.sublist(1) : const [],
+          isLoading: false,
+        );
       }
     } catch (e) {
+      debugPrint('Route fetch error: $e');
       if (mounted) {
         state = state.copyWith(
           error: 'Could not find route. Try again.',
@@ -204,9 +223,27 @@ class NavNotifier extends StateNotifier<NavState> {
     }
   }
 
+  void selectAlternativeRoute(int index) {
+    if (index < 0 || index >= state.alternativeRoutes.length) return;
+    if (state.route == null) return;
+    final selected = state.alternativeRoutes[index];
+    // Put current route back into alternatives, remove the selected one
+    final newAlts = <RouteInfo>[
+      state.route!,
+      ...state.alternativeRoutes.where((r) => r != selected),
+    ];
+    state = state.copyWith(
+      route: selected,
+      alternativeRoutes: newAlts,
+    );
+  }
+
   void setRoutingProfile(RoutingProfile profile) {
     if (state.currentProfile == profile) return;
-    state = state.copyWith(currentProfile: profile);
+    state = state.copyWith(
+      currentProfile: profile,
+      alternativeRoutes: const [], // clear stale alternatives while loading
+    );
     if (state.destination != null) {
       selectDestination(state.destination!);
     }
@@ -216,8 +253,11 @@ class NavNotifier extends StateNotifier<NavState> {
     if (state.route == null) return;
     state = state.copyWith(mode: NavMode.navigating, currentStepIndex: 0);
 
+    // Enable road snapping for real GPS navigation
+    _ref.read(locationProvider.notifier).setSnapToRoad(true);
+
     _navUpdateTimer?.cancel();
-    _navUpdateTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    _navUpdateTimer = Timer.periodic(const Duration(seconds: AppConstants.navUpdateIntervalSec), (_) {
       _updateCurrentStep();
     });
   }
@@ -230,28 +270,31 @@ class NavNotifier extends StateNotifier<NavState> {
     // Drive the car along the route geometry
     final locNotifier = _ref.read(locationProvider.notifier);
     locNotifier.onSimulationFinished = () {
-      if (mounted) stopNavigation();
+      if (mounted) _arriveAtDestination();
     };
     locNotifier.simulateAlongRoute(state.route!.points);
 
     _navUpdateTimer?.cancel();
-    _navUpdateTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    _navUpdateTimer = Timer.periodic(const Duration(seconds: AppConstants.navUpdateIntervalSec), (_) {
       _updateCurrentStep();
     });
   }
 
-  /// "Just drive" mode — windshield view, no destination
-  void startDriving() {
-    state = state.copyWith(mode: NavMode.driving);
-  }
-
-  void stopDriving() {
-    state = const NavState();
-  }
-
   void _updateCurrentStep() {
     final loc = _ref.read(locationProvider);
-    if (!loc.hasLocation || state.route == null) return;
+    if (state.route == null) return;
+
+    // Detect GPS loss during navigation
+    if (!loc.hasLocation) {
+      if (!state.gpsLost) {
+        state = state.copyWith(gpsLost: true);
+      }
+      return;
+    }
+    // GPS recovered
+    if (state.gpsLost) {
+      state = state.copyWith(gpsLost: false);
+    }
 
     final steps = state.route!.steps;
     if (state.currentStepIndex >= steps.length - 1) return;
@@ -263,28 +306,51 @@ class NavNotifier extends StateNotifier<NavState> {
         loc.latitude!, loc.longitude!,
         nextStep.location.latitude, nextStep.location.longitude,
       );
-      if (dist < 30) {
+      if (dist < AppConstants.stepDetectionMeters) {
         state = state.copyWith(currentStepIndex: nextIdx);
       }
     }
 
-    final dest = state.destination!;
+    final dest = state.destination;
+    if (dest == null) return;
     final distToDest = _distanceMeters(
       loc.latitude!, loc.longitude!,
       dest.latitude, dest.longitude,
     );
-    if (distToDest < 50) {
-      stopNavigation();
+    if (distToDest < AppConstants.destinationDetectionMeters) {
+      _arriveAtDestination();
     }
   }
 
-  void stopNavigation() {
+  void _arriveAtDestination() {
     _navUpdateTimer?.cancel();
-    state = const NavState();
+    _ref.read(locationProvider.notifier).stopSimulation();
+    state = state.copyWith(mode: NavMode.arriving);
+    // Auto-dismiss after 3 seconds
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && state.mode == NavMode.arriving) {
+        _fullStop();
+      }
+    });
+  }
+
+  void stopNavigation() {
+    _fullStop();
   }
 
   void clearRoute() {
     _navUpdateTimer?.cancel();
+    state = const NavState();
+  }
+
+  /// Fully stop navigation + simulation + snap-to-road
+  void _fullStop() {
+    _navUpdateTimer?.cancel();
+    _navUpdateTimer = null;
+    final locNotifier = _ref.read(locationProvider.notifier);
+    locNotifier.onSimulationFinished = null; // clear stale callback
+    locNotifier.stopSimulation();
+    locNotifier.setSnapToRoad(false);
     state = const NavState();
   }
 

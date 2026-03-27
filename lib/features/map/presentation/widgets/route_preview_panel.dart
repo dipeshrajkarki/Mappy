@@ -6,23 +6,27 @@ import '../../domain/route_model.dart';
 class RoutePreviewPanel extends StatelessWidget {
   final Place destination;
   final RouteInfo? route;
+  final List<RouteInfo> alternativeRoutes;
   final RoutingProfile currentProfile;
   final bool isLoading;
   final VoidCallback onStart;
   final VoidCallback onSimulate;
   final VoidCallback onClose;
   final ValueChanged<RoutingProfile> onProfileChange;
+  final ValueChanged<int> onAlternativeSelected;
 
   const RoutePreviewPanel({
     super.key,
     required this.destination,
     required this.route,
+    this.alternativeRoutes = const [],
     required this.currentProfile,
     required this.isLoading,
     required this.onStart,
     required this.onSimulate,
     required this.onClose,
     required this.onProfileChange,
+    required this.onAlternativeSelected,
   });
 
   @override
@@ -166,6 +170,41 @@ class RoutePreviewPanel extends StatelessWidget {
                       ),
                     ],
                   ),
+                  // Alternative routes
+                  if (alternativeRoutes.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 36,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: alternativeRoutes.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          final alt = alternativeRoutes[index];
+                          return GestureDetector(
+                            onTap: () => onAlternativeSelected(index),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: AppTheme.bgElevated,
+                                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                                border: Border.all(color: AppTheme.bgSurface),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '${alt.durationText} · ${alt.distanceText}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                 ],
 

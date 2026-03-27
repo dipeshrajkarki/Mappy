@@ -25,11 +25,10 @@ lib/
 
 ## Navigation State Machine
 `NavMode` enum drives all UI:
-- `idle` — home screen with "Your Trip" panel, From/To fields, Drive/D-Pad buttons
+- `idle` — home screen with "Your Trip" panel, From/To fields
 - `searching` — full-screen search (for origin or destination)
 - `routePreview` — route on map + drive/walk/cycle selector + Start/Test buttons
 - `navigating` — turn-by-turn with instructions, ETA, speed (real GPS or simulated)
-- `driving` — free driving mode, windshield camera, no destination
 
 ## Routing Profiles
 `RoutingProfile` enum with Mapbox Directions API profiles:
@@ -37,10 +36,9 @@ lib/
 - `walking` — pedestrian routing (`walking`)
 - `cycling` — bike routing (`cycling`)
 
-## Simulation Modes
-- **Route simulation** — car drives along actual route geometry at ~50 km/h
-- **D-Pad** — virtual joystick for manual driving (off-road, for quick UI testing)
-- Both modes show the navigation arrow, disable native GPS puck, and enable windshield camera
+## Simulation Mode
+- **Route simulation** — car drives along actual route geometry at ~50 km/h via the "Test" button in route preview
+- Shows the navigation arrow, disables native GPS puck, and enables windshield camera
 
 ## Vehicle System
 - `classic` — 2D lime chevron arrow (generated programmatically)
@@ -54,7 +52,7 @@ lib/
 - **Traffic-aware routing** via `driving-traffic` Mapbox profile
 - **3D buildings** via FillExtrusionLayer on the dark map style
 - **Route simulation at realistic speed** — 50 km/h, progress-based interpolation along route geometry
-- **Windshield camera** — 55 pitch, camera offset 40m behind heading, heading-follow
+- **Street-level camera** — 65 pitch, zoom 19, camera offset 20m behind heading — close enough to see lanes
 - **Camera lock during simulation** — scroll listener disabled during fake GPS to prevent camera detaching
 - **North-up toggle** — compass button switches between heading-up and north-up views
 - **Editable origin** — "From" field supports custom starting point via search

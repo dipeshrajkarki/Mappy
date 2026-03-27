@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/network/api_client.dart';
 
 class MapMatchingService {
-  final _dio = Dio();
+  final _dio = createApiClient();
 
   /// Snaps a coordinate to the nearest road.
   /// Returns (lat, lng, bearing) or null if no road nearby.
@@ -25,17 +27,25 @@ class MapMatchingService {
       if (matchings == null || matchings.isEmpty) return null;
 
       final geometry =
-          matchings[0]['geometry'] as Map<String, dynamic>;
-      final coords = geometry['coordinates'] as List;
-      if (coords.isEmpty) return null;
+          matchings[0]['geometry'] as Map<String, dynamic>?;
+      if (geometry == null) return null;
+
+      final coords = geometry['coordinates'] as List?;
+      if (coords == null || coords.isEmpty) return null;
 
       final first = coords[0] as List;
+      if (first.length < 2) return null;
+
       return (
         (first[1] as num).toDouble(),
         (first[0] as num).toDouble(),
         heading,
       );
-    } catch (_) {
+    } on DioException catch (e) {
+      debugPrint('Map matching error: ${e.type} — ${e.message}');
+      return null;
+    } catch (e) {
+      debugPrint('Map matching parse error: $e');
       return null;
     }
   }

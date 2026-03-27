@@ -11,10 +11,13 @@ class Place {
     required this.longitude,
   });
 
-  factory Place.fromMapboxFeature(Map<String, dynamic> feature) {
+  static Place? fromMapboxFeature(Map<String, dynamic> feature) {
     final props = feature['properties'] as Map<String, dynamic>? ?? {};
-    final geometry = feature['geometry'] as Map<String, dynamic>;
-    final coords = geometry['coordinates'] as List;
+    final geometry = feature['geometry'] as Map<String, dynamic>?;
+    if (geometry == null) return null;
+
+    final coords = geometry['coordinates'] as List?;
+    if (coords == null || coords.length < 2) return null;
 
     return Place(
       name: props['name'] as String? ?? props['full_address'] as String? ?? 'Unknown',

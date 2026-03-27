@@ -80,6 +80,7 @@ class RouteStep {
   final String maneuver;
   final String streetName;
   final RoutePoint location;
+  final List<LaneInfo> lanes;
 
   const RouteStep({
     required this.instruction,
@@ -88,12 +89,35 @@ class RouteStep {
     required this.maneuver,
     required this.location,
     this.streetName = '',
+    this.lanes = const [],
   });
+
+  bool get hasLaneGuidance => lanes.isNotEmpty;
 
   String get distanceText {
     if (distanceMeters >= 1000) {
       return '${(distanceMeters / 1000).toStringAsFixed(1)} km';
     }
     return '${distanceMeters.round()} m';
+  }
+}
+
+/// Lane guidance data from Mapbox Directions API.
+/// Each lane has a list of possible directions and whether it's valid
+/// for the current maneuver.
+class LaneInfo {
+  final bool valid;
+  final List<String> indications; // "left", "straight", "right", "slight left", etc.
+
+  const LaneInfo({required this.valid, required this.indications});
+
+  factory LaneInfo.fromJson(Map<String, dynamic> json) {
+    return LaneInfo(
+      valid: json['valid'] as bool? ?? false,
+      indications: (json['indications'] as List?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
+    );
   }
 }

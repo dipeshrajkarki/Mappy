@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(reg add:*)",
-      "Bash(powershell -Command \"reg add ''HKLM\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\AppModelUnlock'' /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1\")"
+      "Bash(powershell -Command \"reg add ''HKLM\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\AppModelUnlock'' /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1\")",
+      "Bash(\"D:/Mappy/lib/features/map/presentation/map_screen_clean.dart\")",
+      "Bash(dart fix:*)",
+      "Bash(wc -l lib/**/*.dart lib/**/**/*.dart lib/**/**/**/*.dart lib/**/**/**/**/*.dart)",
+      "Bash($ANDROID_HOME/platform-tools/adb.exe wait-for-device:*)"
     ]
   },
   "enabledPlugins": {
